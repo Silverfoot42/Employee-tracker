@@ -1,17 +1,21 @@
 const mysql = require('mysql2');
 const inquirer = require('inquirer');
 
-const db = mysql.createConnection(
-  {
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'employee_db'
-  },
-  () => {
-    console.log(`Connected to the employee database.`)
-    menu();
-  });
+const db = mysql.createConnection({
+  host: 'localhost',
+  user: 'root',
+  password: '',
+  database: 'employee_db'
+});
+
+db.connect((err) => {
+  if (err) {
+    console.error('Error connecting to the database:', err);
+    return;
+  }
+  console.log('Connected to the employee database.');
+  menu();
+});
 
 const menu = async () => {
   const selection = await inquirer.prompt([
@@ -30,7 +34,7 @@ const menu = async () => {
       menu();
     });
   } else if (selection.options === 'View all roles') {
-    db.query('SELECT roles.id, roles.title, department.department_name AS department, roles.salary FROM roles JOIN department ON role.department_id = department.id ORDER BY department.id', (err, results) => {
+    db.query('SELECT roles.id, roles.title, department.department_name AS department, roles.salary FROM roles JOIN department ON roles.department_id = department.id ORDER BY department.id', (err, results) => {
       if (err) throw err;
       console.table(results);
       menu();
@@ -78,14 +82,14 @@ const menu = async () => {
         type: 'list',
         name: 'department',
         message: 'Select the department this role belongs to',
-        choices: getDepartmentChoices(),
+        choices: async () => await getDepartmentChoices(),
       },
     ])
     .then((answers) => {
       const roleName = answers.role;
       const salary = answers.salary;
-      const depatmentName = answers.department;
-      const values = [roleName, salary, depatmentName];
+      const departmentName = answers.department;
+      const values = [roleName, salary, departmentName];
 
       db.query('INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)', values, (err, results) => {
         if (err) {
@@ -109,16 +113,16 @@ const menu = async () => {
         message: 'Enter the employee\'s last name:',
       },
       {
-        type: 'input',
+        type: 'list',
         name: 'role',
         message: 'Select the employess\'s role:',
-        choices: getRoleChoices(),
+        choices: async () => await getRoleChoices(),
       },
       {
         type: 'list',
         name: 'manager',
         message: 'Who is this employees manager?',
-        choices: getManagerChoices(),
+        choices: async () => await getManagerChoices(),
       },
     ])
     .then((answers) => {
@@ -126,51 +130,66 @@ const menu = async () => {
       const lastName = answers.last;
       const role = answers.role;
       const manager = answers.manager;
-      
-      db.query('SELECT salary, department FROM roles WHERE title = ?', role, (err, results) => { 
+    
+      db.query('SELECT id AS role_id FROM roles WHERE title = ?', role, (err, results) => {
         if (err) {
           console.error('Error retrieving role information:', err);
         } else {
-          const salary = results[0].salary;
-          const department = results[0].department;
-          const values = [firstName, lastName, role, manager === 'None' ? null: manager, salary, department];
-      
-          db.query('INSERT INTO employees (first_name, last_name, role, manager, salary, department) VALUES (?, ?, ?, ?, ?, ?)', values, (err, results) => {
+          const role_id = results[0].role_id;
+    
+          db.query('SELECT id AS manager_id FROM employees WHERE CONCAT(first_name, " ", last_name) = ?', manager, (err, results) => {
             if (err) {
-              console.error('Error adding employee:', err);
+              console.error('Error retrieving manager information:', err);
             } else {
-              console.log('Employee added successfully!');
-              menu();
+              const manager_id = results[0] ? results[0].manager_id : null;
+              const values = [firstName, lastName, role_id, manager_id];
+    
+              db.query('INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (?, ?, ?, ?)', values, (err, results) => {
+                if (err) {
+                  console.error('Error adding employee:', err);
+                } else {
+                  console.log('Employee added successfully!');
+                  menu();
+                }
+              });
             }
           });
         }
       });
-    }); 
+    });
   } else if (selection.options === 'Update an employee role') {
     inquirer.prompt([
       {
         type: 'list',
         name: 'employee',
         message: 'Select which employee will have their role updated:',
-        choices: getEmployeeChoices(),
+        choices: async () => await getEmployeeChoices(),
       },
       {
         type: 'list',
         name: 'role',
         message: 'Select which role you would like to switch to:',
-        choices: getRoleChoices(),
+        choices: async () => await getRoleChoices(),
       },
     ])
     .then((answers) => {
       const employeeId = answers.employee;
-      const roleId = answers.role;
+      const roleName = answers.role;
 
-      db.query('UPDATE employees SET role_id = ? WHERE id = ?', [roleId, employeeId], (err, result) => {
+      db.query('SELECT id FROM roles WHERE title = ?', [roleName], (err, result) => {
         if (err) {
-          console.log('Error updating employee role:', err);
+          console.log('Error retrieving role ID:', err);
         } else {
-          console.log('Employee role updated successfully!');
-          menu();
+          const roleId = result[0].id;
+    
+          db.query('UPDATE employees SET role_id = ? WHERE id = ?', [roleId, employeeId], (err, result) => {
+            if (err) {
+              console.log('Error updating employee role:', err);
+            } else {
+              console.log('Employee role updated successfully!');
+              menu();
+            }
+          });
         }
       });
     });
@@ -181,12 +200,15 @@ const menu = async () => {
 
 function getDepartmentChoices() {
   return new Promise((resolve, reject) => {
-    db.query('SELECT department_name FROM department', (err, results) => {
+    db.query('SELECT id, department_name FROM department', (err, results) => {
       if (err) {
         reject(err);
       } else {
-        const departmentNames = results.map((row) => row.department_name); 
-        resolve(departmentNames);
+        const departments = results.map((row) => ({
+          name: row.department_name,
+          value: row.id
+        }));
+        resolve(departments);
       }
     });
   });
@@ -194,7 +216,7 @@ function getDepartmentChoices() {
 
 function getRoleChoices() {
   return new Promise((resolve, reject) => {
-    db.query('SELECT title FROM roles', (err, results) => {
+    db.query('SELECT id, title FROM roles', (err, results) => {
       if (err) {
         reject(err);
       } else {
@@ -221,13 +243,13 @@ function getManagerChoices() {
 
 function getEmployeeChoices() {
   return new Promise((resolve, reject) => {
-    db.query('SELECT first_name, last_name FROM employees', (err, results) => {
+    db.query('SELECT id, first_name, last_name FROM employees', (err, results) => {
       if (err) {
         reject(err);
       } else {
-        const employeeNames = results.map((employee) => ({
-          name: `${employee.first_name} ${employee.last_name}`,
-          value: employee.id,
+        const employeeNames = results.map((employees) => ({
+          name: `${employees.first_name} ${employees.last_name}`,
+          value: employees.id,
         })); 
         resolve(employeeNames);
       }
