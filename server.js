@@ -8,6 +8,7 @@ const db = mysql.createConnection({
   database: 'employee_db'
 });
 
+//connects to server
 db.connect((err) => {
   if (err) {
     console.error('Error connecting to the database:', err);
@@ -17,6 +18,7 @@ db.connect((err) => {
   menu();
 });
 
+//displays cli menu
 const menu = async () => {
   const selection = await inquirer.prompt([
     {
@@ -27,25 +29,26 @@ const menu = async () => {
     }
   ]);
 
+  //shows the department table if it is selected in the menu
   if(selection.options === 'View all departments') {
     db.query('SELECT * FROM department', (err, results) => {
       if (err) throw err;
       console.table(results);
       menu();
     });
-  } else if (selection.options === 'View all roles') {
+  } else if (selection.options === 'View all roles') { //Shows the roles table if it is selected in the menu
     db.query('SELECT roles.id, roles.title, department.department_name AS department, roles.salary FROM roles JOIN department ON roles.department_id = department.id ORDER BY department.id', (err, results) => {
       if (err) throw err;
       console.table(results);
       menu();
     });
-  } else if (selection.options === 'View all employees') {
+  } else if (selection.options === 'View all employees') { //Shows the employees table if it is selected in the menu
     db.query('SELECT employees.id, employees.first_name, employees.last_name, roles.title, department.department_name AS department, roles.salary, CONCAT(manager.first_name, \' \', manager.last_name) AS manager_name FROM employees JOIN roles ON employees.role_id = roles.id JOIN department ON roles.department_id = department.id LEFT JOIN employees manager ON employees.manager_id = manager.id ORDER BY employees.id', (err, results) => {
       if (err) throw err;
       console.table(results);
       menu();
     });
-  } else if (selection.options === 'Add a department') {
+  } else if (selection.options === 'Add a department') { //Asks the user questions so that they can add a new department to the department table and adds it to the table
     inquirer.prompt([
       {
         type: 'input',
@@ -66,7 +69,7 @@ const menu = async () => {
         }   
       });
     })
-  } else if (selection.options === 'Add a role') {
+  } else if (selection.options === 'Add a role') { //Asks a user questions so that they can add a role and then adds the role
     inquirer.prompt([
       {
         type: 'input',
@@ -100,7 +103,7 @@ const menu = async () => {
         }
       });
     });
-  } else if (selection.options === 'Add an employee') {
+  } else if (selection.options === 'Add an employee') { //Asks the user questions for adding a new employee to the employees table and then adds the employee
     inquirer.prompt([
       {
         type: 'input',
@@ -157,7 +160,7 @@ const menu = async () => {
         }
       });
     });
-  } else if (selection.options === 'Update an employee role') {
+  } else if (selection.options === 'Update an employee role') { //updates the role of an existing employee
     inquirer.prompt([
       {
         type: 'list',
@@ -193,12 +196,12 @@ const menu = async () => {
         }
       });
     });
-  } else if (selection.options === 'Quit') {
+  } else if (selection.options === 'Quit') { //quits out of the program
     process.exit();
   }
 };
 
-function getDepartmentChoices() {
+function getDepartmentChoices() { //function for displaying a list of departments for the inquirer question in the cli
   return new Promise((resolve, reject) => {
     db.query('SELECT id, department_name FROM department', (err, results) => {
       if (err) {
@@ -214,7 +217,7 @@ function getDepartmentChoices() {
   });
 }
 
-function getRoleChoices() {
+function getRoleChoices() { //function for displaying a list of roles for the inquirer question in the cli
   return new Promise((resolve, reject) => {
     db.query('SELECT id, title FROM roles', (err, results) => {
       if (err) {
@@ -227,7 +230,7 @@ function getRoleChoices() {
   });
 }
 
-function getManagerChoices() {
+function getManagerChoices() { //function for displaying a list of managers for the inquirer question in the cli
   return new Promise((resolve, reject) => {
     db.query('SELECT CONCAT(first_name, " ", last_name) AS manager_name FROM employees', (err, results) => {
       if (err) {
@@ -241,7 +244,7 @@ function getManagerChoices() {
   });
 }
 
-function getEmployeeChoices() {
+function getEmployeeChoices() { //function for displaying a list of all employees for the inquirer question in the cli
   return new Promise((resolve, reject) => {
     db.query('SELECT id, first_name, last_name FROM employees', (err, results) => {
       if (err) {
