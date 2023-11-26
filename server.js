@@ -1,6 +1,7 @@
 const mysql = require('mysql2');
 const inquirer = require('inquirer');
 
+//need to enter mysql password below
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
